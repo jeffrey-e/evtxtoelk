@@ -24,9 +24,13 @@ class EvtxToElk:
             return False
 
     @staticmethod
-    def evtx_to_elk(filename, elk_ip, elk_index="hostlogs", bulk_queue_len_threshold=500, metadata={}):
+    def evtx_to_elk(filename, elk_ip, auth_enabled=False, user="elastic", secret="changeme", elk_index="hostlogs", bulk_queue_len_threshold=500, metadata={}):
         bulk_queue = []
-        es = Elasticsearch([elk_ip])
+        
+        if auth_enabled:
+            es = Elasticsearch([elk_ip], http_auth=(user, secret), verify_certs=False)
+        else:
+            es = Elasticsearch([elk_ip], http_auth=(user, secret), verify_certs=False)
         with open(filename) as infile:
             with contextlib.closing(mmap.mmap(infile.fileno(), 0, access=mmap.ACCESS_READ)) as buf:
                 fh = FileHeader(buf, 0x0)
@@ -93,18 +97,12 @@ class EvtxToElk:
                         #    "metadata": metadata
                         #})
                         #bulk_queue.append(event_record)
-                        event_data = json.loads(json.dumps(log_line))
-                        event_data["_index"] = elk_index
-                        event_data["_type"] = elk_index
-                        event_data["meta"] = metadata
-                        bulk_queue.append(event_data)
-
-                        #bulk_queue.append({
-                        #    "_index": elk_index,
-                        #    "_type": elk_index,
-                        #    "body": json.loads(json.dumps(log_line)),
-                        #    "metadata": metadata
-                        #})
+                        bulk_queue.append({
+                            "_index": elk_index,
+                            "_type": elk_index,
+                            "body": json.loads(json.dumps(log_line)),
+                            "metadata": metadata
+                        })
 
                         if len(bulk_queue) == bulk_queue_len_threshold:
                             print('Bulkingrecords to ES: ' + str(len(bulk_queue)))
@@ -144,3 +142,4 @@ if __name__ == "__main__":
     # Parse arguments and call evtx to elk class
     args = parser.parse_args()
     EvtxToElk.evtx_to_elk(args.evtxfile, args.elk_ip, elk_index=args.i, bulk_queue_len_threshold=int(args.s), metadata=args.meta)
+    
